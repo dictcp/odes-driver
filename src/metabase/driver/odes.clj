@@ -1,4 +1,4 @@
-(ns metabase.driver.crate
+(ns metabase.driver.odes
   (:refer-clojure :exclude [second])
   (:require [clojure.java.jdbc :as jdbc]
             [clojure.string :as str]
@@ -18,7 +18,7 @@
              [i18n :refer [trs]]])
   (:import [java.sql DatabaseMetaData Timestamp]))
 
-(driver/register! :crate, :parent :sql-jdbc)
+(driver/register! :odes, :parent :sql-jdbc)
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                              HoneySQL Extensions                                               |
@@ -30,7 +30,7 @@
   [s c i]
   (str c (subs s 0 i) c (subs s i)))
 
-(defn- crate-column-identifier
+(defn- odes-column-identifier
   [^CharSequence s]
   (let [idx (str/index-of s "[")]
     (if (nil? idx)
@@ -39,11 +39,11 @@
 
 (let [quote-fns @(resolve 'hformat/quote-fns)]
   (intern 'honeysql.format 'quote-fns
-          (assoc quote-fns :crate crate-column-identifier)))
+          (assoc quote-fns :odes odes-column-identifier)))
 
 ;; register the try_cast function with HoneySQL
-;; (hsql/format (hsql/call :crate-try-cast :TIMESTAMP :field)) -> "try_cast(field as TIMESTAMP)"
-(defmethod hformat/fn-handler "crate-try-cast" [_ klass expr]
+;; (hsql/format (hsql/call :odes-try-cast :TIMESTAMP :field)) -> "try_cast(field as TIMESTAMP)"
+(defmethod hformat/fn-handler "odes-try-cast" [_ klass expr]
   (str "try_cast(" (hformat/to-sql expr) " as " (name klass) ")"))
 
 
@@ -62,21 +62,21 @@
 ;;; |                                          metabase.driver method impls                                          |
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
-(defmethod driver/supports? [:crate :foreign-keys] [_ _] false)
+(defmethod driver/supports? [:odes :foreign-keys] [_ _] false)
 
-(defmethod driver.common/current-db-time-date-formatters :crate [_]
+(defmethod driver.common/current-db-time-date-formatters :odes [_]
   (driver.common/create-db-time-formatters "yyyy-MM-dd HH:mm:ss.SSSSSSZ"))
 
-(defmethod driver.common/current-db-time-native-query :crate [_]
+(defmethod driver.common/current-db-time-native-query :odes [_]
   "select DATE_FORMAT(current_timestamp, '%Y-%m-%d %H:%i:%S.%fZ')")
 
-(defmethod driver/current-db-time :crate [& args]
+(defmethod driver/current-db-time :odes [& args]
   (apply driver.common/current-db-time args))
 
 (defn- sql-interval [unit amount]
   (format "current_timestamp + %d" (* unit amount)))
 
-(defmethod driver/date-interval :crate [_ unit amount]
+(defmethod driver/date-interval :odes [_ unit amount]
   (case unit
     :quarter (recur nil :month (hx/* amount 3))
     :year    (hsql/raw (sql-interval year   amount))
@@ -92,16 +92,16 @@
 ;;; |                                        metabase.driver.sql method impls                                        |
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
-(defmethod sql.qp/quote-style :crate [_] :crate)
+(defmethod sql.qp/quote-style :odes [_] :odes)
 
-(defmethod sql.qp/current-datetime-fn :crate [_] (hsql/call :current_timestamp 3))
+(defmethod sql.qp/current-datetime-fn :odes [_] (hsql/call :current_timestamp 3))
 
-(defmethod sql.qp/field->alias :crate [& _] nil)
+(defmethod sql.qp/field->alias :odes [& _] nil)
 
-(defmethod sql.qp/unix-timestamp->timestamp :crate [driver seconds-or-milliseconds field-or-value]
+(defmethod sql.qp/unix-timestamp->timestamp :odes [driver seconds-or-milliseconds field-or-value]
   (case seconds-or-milliseconds
     :seconds      (recur nil (hx/* field-or-value 1000) :milliseconds)
-    :milliseconds (hsql/call :crate-try-cast :TIMESTAMP field-or-value)))
+    :milliseconds (hsql/call :odes-try-cast :TIMESTAMP field-or-value)))
 
 
 ;;; ------------------------------------------- sql.qp/date implementation -------------------------------------------
@@ -139,56 +139,56 @@
     (hx/literal (du/date->iso-8601 expr))
     expr))
 
-(defmethod sql.qp/date [:crate :default] [_ _ expr]
+(defmethod sql.qp/date [:odes :default] [_ _ expr]
   (date-format (str "%Y-%m-%d %H:%i:%s") (expr->literal expr)))
 
-(defmethod sql.qp/date [:crate :second] [_ _ expr]
+(defmethod sql.qp/date [:odes :second] [_ _ expr]
   (date-format (str "%Y-%m-%d %H:%i:%s") (date-trunc :second (expr->literal expr))))
 
-(defmethod sql.qp/date [:crate :minute] [_ _ expr]
+(defmethod sql.qp/date [:odes :minute] [_ _ expr]
   (date-format (str "%Y-%m-%d %H:%i:%s") (date-trunc :minute (expr->literal expr))))
 
-(defmethod sql.qp/date [:crate :minute-of-hour] [_ _ expr]
+(defmethod sql.qp/date [:odes :minute-of-hour] [_ _ expr]
   (extract-integer :minute (expr->literal expr)))
 
-(defmethod sql.qp/date [:crate :hour] [_ _ expr]
+(defmethod sql.qp/date [:odes :hour] [_ _ expr]
   (date-format (str "%Y-%m-%d %H:%i:%s") (date-trunc :hour (expr->literal expr))))
 
-(defmethod sql.qp/date [:crate :hour-of-day] [_ _ expr]
+(defmethod sql.qp/date [:odes :hour-of-day] [_ _ expr]
   (extract-integer :hour (expr->literal expr)))
 
-(defmethod sql.qp/date [:crate :day] [_ _ expr]
+(defmethod sql.qp/date [:odes :day] [_ _ expr]
   (date-format (str "%Y-%m-%d") (date-trunc :day (expr->literal expr))))
 
-(defmethod sql.qp/date [:crate :day-of-week] [_ _ expr]
+(defmethod sql.qp/date [:odes :day-of-week] [_ _ expr]
   (extract-integer :day_of_week (expr->literal expr)))
 
-(defmethod sql.qp/date [:crate :day-of-month] [_ _ expr]
+(defmethod sql.qp/date [:odes :day-of-month] [_ _ expr]
   (extract-integer :day_of_month (expr->literal expr)))
 
-(defmethod sql.qp/date [:crate :day-of-year] [_ _ expr]
+(defmethod sql.qp/date [:odes :day-of-year] [_ _ expr]
   (extract-integer :day_of_year (expr->literal expr)))
 
 ;; Crate weeks start on Monday, so shift this date into the proper bucket and then decrement the resulting day
-(defmethod sql.qp/date [:crate :week] [_ _ expr]
+(defmethod sql.qp/date [:odes :week] [_ _ expr]
   (date-format (str "%Y-%m-%d") (hx/- (date-trunc :week (hx/+ (expr->literal expr) day)) day)))
 
-(defmethod sql.qp/date [:crate :week-of-year] [_ _ expr]
+(defmethod sql.qp/date [:odes :week-of-year] [_ _ expr]
   (extract-integer :week (expr->literal expr)))
 
-(defmethod sql.qp/date [:crate :month] [_ _ expr]
+(defmethod sql.qp/date [:odes :month] [_ _ expr]
   (date-format (str "%Y-%m-%d") (date-trunc :month (expr->literal expr))))
 
-(defmethod sql.qp/date [:crate :month-of-year] [_ _ expr]
+(defmethod sql.qp/date [:odes :month-of-year] [_ _ expr]
   (extract-integer :month (expr->literal expr)))
 
-(defmethod sql.qp/date [:crate :quarter] [_ _ expr]
+(defmethod sql.qp/date [:odes :quarter] [_ _ expr]
   (date-format (str "%Y-%m-%d") (date-trunc :quarter (expr->literal expr))))
 
-(defmethod sql.qp/date [:crate :quarter-of-year] [_ _ expr]
+(defmethod sql.qp/date [:odes :quarter-of-year] [_ _ expr]
   (extract-integer :quarter (expr->literal expr)))
 
-(defmethod sql.qp/date [:crate :year] [_ _ expr]
+(defmethod sql.qp/date [:odes :year] [_ _ expr]
   (extract-integer :year (expr->literal expr)))
 
 
@@ -198,12 +198,12 @@
 
 ;;; ---------------------------------------------- sql-jdbc.connection -----------------------------------------------
 
-(defmethod sql-jdbc.conn/connection-details->spec :crate [_ {:keys [hosts], :as details}]
+(defmethod sql-jdbc.conn/connection-details->spec :odes [_ {:keys [hosts], :as details}]
   (merge
-   {:classname   "io.crate.client.jdbc.CrateDriver"
-    :subprotocol "crate"
-    :subname     (str "//" hosts)
-    :user        "crate"}
+   {:classname   "metabase.driver.FixedOdesDriver"
+;;   {:classname   "com.amazon.opendistroforelasticsearch.jdbc.Driver"
+    :subprotocol "elasticsearch"
+    :subname     (str "//" hosts)}
    (dissoc details :hosts)))
 
 
@@ -211,7 +211,7 @@
 
 ;; Map of Crate column types -> Field base types
 ;; See https://crate.io/docs/reference/sql/data_types.html
-(defmethod sql-jdbc.sync/database-type->base-type :crate [_ database-type]
+(defmethod sql-jdbc.sync/database-type->base-type :odes [_ database-type]
   ({:integer         :type/Integer
     :string          :type/Text
     :boolean         :type/Boolean
@@ -273,9 +273,15 @@
                                      field
                                      (assoc field :pk? true))))))))
 
-(defmethod driver/describe-table :crate [driver database table]
+(defmethod driver/describe-table :odes [driver database table]
   (jdbc/with-db-metadata [metadata (sql-jdbc.conn/db->pooled-connection-spec database)]
     (->> (describe-table-fields driver database table)
          (assoc (select-keys table [:name :schema]) :fields)
          ;; find PKs and mark them
          (add-table-pks metadata))))
+
+;; FIXME HARDCODE
+;; ODES does not support "SELECT 1" query yet
+(defmethod driver/can-connect? :odes [driver details]
+  (let [connection (sql-jdbc.conn/connection-details->spec driver details)]
+    (= 1 (first (vals (first (jdbc/query connection ["select count(*) from a where v=1"])))))))
